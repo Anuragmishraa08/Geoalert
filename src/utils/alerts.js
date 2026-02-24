@@ -19,13 +19,34 @@ export const requestNotificationPermission = async () => {
   }
 }
 
-export const sendSystemNotification = ({ title, body }) => {
+export const sendSystemNotification = async ({ title, body }) => {
   if (!('Notification' in window) || Notification.permission !== 'granted') {
     return false
   }
 
-  new Notification(title, { body, icon: '/vite.svg' })
-  return true
+  const options = {
+    body,
+    icon: '/vite.svg',
+    badge: '/vite.svg',
+    vibrate: [250, 120, 250],
+    renotify: true,
+    tag: `geotask-${title}`,
+  }
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.getRegistration()
+      if (registration) {
+        await registration.showNotification(title, options)
+        return true
+      }
+    }
+    new Notification(title, options)
+    return true
+  } catch {
+    new Notification(title, options)
+    return true
+  }
 }
 
 export const speakText = (text) => {
@@ -64,4 +85,11 @@ export const playImpactTone = () => {
   } catch {
     return false
   }
+}
+
+export const triggerVibration = () => {
+  if (!('vibrate' in navigator)) {
+    return false
+  }
+  return navigator.vibrate([220, 120, 220])
 }

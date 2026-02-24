@@ -5,6 +5,7 @@ import {
   requestNotificationPermission,
   sendSystemNotification,
   speakText,
+  triggerVibration,
 } from './utils/alerts'
 import { haversineDistanceMeters, validateCoordinates } from './utils/geo'
 import { loadGeofences, saveGeofences } from './utils/storage'
@@ -105,6 +106,7 @@ function App() {
   const [geoStatus, setGeoStatus] = useState('pending')
   const [notificationStatus, setNotificationStatus] = useState('pending')
   const [errorMessage, setErrorMessage] = useState('')
+  const [infoMessage, setInfoMessage] = useState('')
 
   const watchIdRef = useRef(null)
   const insideRef = useRef({})
@@ -191,6 +193,7 @@ function App() {
             body: fence.task || 'Location reminder triggered.',
           })
           playImpactTone()
+          triggerVibration()
           speakText(
             `You have reached ${fence.name}. ${
               fence.task || 'Your location reminder is now active.'
@@ -273,6 +276,7 @@ function App() {
         }))
         setLocationQuery('My Current Location')
         setErrorMessage('')
+        setInfoMessage('Current location captured. Tap Save Destination Reminder.')
       },
       (error) => {
         if (error.code === 1) {
@@ -318,6 +322,7 @@ function App() {
     setLocationSuggestions([])
     setLocationSearchError('')
     setErrorMessage('')
+    setInfoMessage(`Destination saved: ${name}`)
   }
 
   const handleSuggestionSelect = (suggestion) => {
@@ -360,9 +365,22 @@ function App() {
     delete insideRef.current[id]
   }
 
+  const handleEnableMobileAlerts = async () => {
+    const status = await requestNotificationPermission()
+    setNotificationStatus(status)
+    if (status === 'granted') {
+      setInfoMessage('Mobile alerts enabled.')
+      setErrorMessage('')
+      return
+    }
+    setErrorMessage(
+      'Notifications are not enabled. Open browser site settings and allow Notifications.',
+    )
+  }
+
   return (
     <main
-      className={`min-h-screen bg-gradient-to-br ${themeClass} px-4 py-6 text-white transition-colors duration-500`}
+      className={`min-h-screen bg-gradient-to-br ${themeClass} px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-6 text-white transition-colors duration-500`}
     >
       <div className="mx-auto max-w-3xl space-y-4">
         <header className="rounded-2xl border border-white/20 bg-white/10 p-4 backdrop-blur">
@@ -379,6 +397,20 @@ function App() {
               Active Mode: {activeFence ? activeFence.name : 'Idle'}
             </p>
           </div>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={handleEnableMobileAlerts}
+              className="w-full rounded-xl bg-amber-500 px-4 py-3 text-sm font-semibold text-white active:scale-[0.99] sm:w-auto"
+            >
+              Enable Mobile Alerts
+            </button>
+          </div>
+          {infoMessage ? (
+            <p className="mt-3 rounded-lg border border-emerald-300/40 bg-emerald-500/20 p-2 text-xs">
+              {infoMessage}
+            </p>
+          ) : null}
           {errorMessage ? (
             <p className="mt-3 rounded-lg border border-red-300/40 bg-red-500/30 p-2 text-xs">
               {errorMessage}
@@ -393,7 +425,7 @@ function App() {
               <button
                 type="button"
                 onClick={handleGetCurrentLocation}
-                className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-400"
+                className="rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-400 active:scale-[0.99]"
               >
                 Use My Current Location
               </button>
@@ -468,7 +500,7 @@ function App() {
                     key={option}
                     type="button"
                     onClick={() => setForm((prev) => ({ ...prev, radius: option }))}
-                    className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                    className={`rounded-xl px-4 py-3 text-sm font-semibold active:scale-[0.99] ${
                       form.radius === option ? 'bg-cyan-500 text-white' : 'bg-black/30 text-white/85'
                     }`}
                   >
@@ -514,7 +546,7 @@ function App() {
 
             <button
               type="submit"
-              className="w-full rounded-xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-white hover:bg-cyan-400"
+              className="sticky bottom-3 w-full rounded-xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-900/40 hover:bg-cyan-400 active:scale-[0.99]"
             >
               Save Destination Reminder
             </button>
