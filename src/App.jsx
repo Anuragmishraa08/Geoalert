@@ -107,6 +107,10 @@ function App() {
   const [notificationStatus, setNotificationStatus] = useState('pending')
   const [errorMessage, setErrorMessage] = useState('')
   const [infoMessage, setInfoMessage] = useState('')
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null)
+  const [isInstalled, setIsInstalled] = useState(
+    window.matchMedia?.('(display-mode: standalone)')?.matches || false,
+  )
 
   const watchIdRef = useRef(null)
   const insideRef = useRef({})
@@ -124,6 +128,26 @@ function App() {
     })
     return () => {
       mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (event) => {
+      event.preventDefault()
+      setDeferredInstallPrompt(event)
+    }
+
+    const handleAppInstalled = () => {
+      setIsInstalled(true)
+      setDeferredInstallPrompt(null)
+      setInfoMessage('App installed successfully.')
+    }
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+    window.addEventListener('appinstalled', handleAppInstalled)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+      window.removeEventListener('appinstalled', handleAppInstalled)
     }
   }, [])
 
@@ -378,6 +402,50 @@ function App() {
     )
   }
 
+  const handleTestNotification = async () => {
+    const status =
+      notificationStatus === 'granted'
+        ? 'granted'
+        : await requestNotificationPermission()
+
+    setNotificationStatus(status)
+    if (status !== 'granted') {
+      setErrorMessage('Allow notifications first to receive Android notification tray alerts.')
+      return
+    }
+
+    await sendSystemNotification({
+      title: 'GeoTask Test Alert',
+      body: 'Android notification tray alert is working.',
+    })
+    triggerVibration()
+    setInfoMessage('Test notification sent.')
+    setErrorMessage('')
+  }
+
+  const handleInstallApp = async () => {
+    if (isInstalled) {
+      setInfoMessage('App already installed.')
+      return
+    }
+
+    if (!deferredInstallPrompt) {
+      setInfoMessage(
+        'Install prompt not available. On iPhone Safari: Share > Add to Home Screen.',
+      )
+      return
+    }
+
+    deferredInstallPrompt.prompt()
+    const choice = await deferredInstallPrompt.userChoice
+    if (choice.outcome === 'accepted') {
+      setInfoMessage('Install accepted.')
+    } else {
+      setInfoMessage('Install dismissed.')
+    }
+    setDeferredInstallPrompt(null)
+  }
+
   return (
     <main
       className={`min-h-screen bg-gradient-to-br ${themeClass} px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-6 text-white transition-colors duration-500`}
@@ -398,13 +466,29 @@ function App() {
             </p>
           </div>
           <div className="mt-3">
-            <button
-              type="button"
-              onClick={handleEnableMobileAlerts}
-              className="w-full rounded-xl bg-amber-500 px-4 py-3 text-sm font-semibold text-white active:scale-[0.99] sm:w-auto"
-            >
-              Enable Mobile Alerts
-            </button>
+            <div className="grid gap-2 sm:flex">
+              <button
+                type="button"
+                onClick={handleEnableMobileAlerts}
+                className="w-full rounded-xl bg-amber-500 px-4 py-3 text-sm font-semibold text-white active:scale-[0.99] sm:w-auto"
+              >
+                Enable Mobile Alerts
+              </button>
+              <button
+                type="button"
+                onClick={handleTestNotification}
+                className="w-full rounded-xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white active:scale-[0.99] sm:w-auto"
+              >
+                Send Test Notification
+              </button>
+              <button
+                type="button"
+                onClick={handleInstallApp}
+                className="w-full rounded-xl bg-fuchsia-600 px-4 py-3 text-sm font-semibold text-white active:scale-[0.99] sm:w-auto"
+              >
+                {isInstalled ? 'App Installed' : 'Install App'}
+              </button>
+            </div>
           </div>
           {infoMessage ? (
             <p className="mt-3 rounded-lg border border-emerald-300/40 bg-emerald-500/20 p-2 text-xs">
