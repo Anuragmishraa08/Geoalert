@@ -14,6 +14,43 @@ import { loadGeofences, saveGeofences } from './utils/storage'
 const TRACKING_INTERVAL_MS = 30000
 const RADIUS_OPTIONS = [50, 100, 500]
 const MAX_GEOFENCES = 20
+const QUICK_TEMPLATES = [
+  {
+    id: 'office',
+    label: 'Office',
+    name: 'Office',
+    task: 'Reached Office. Keep your phone on silent and check agenda.',
+    radius: 100,
+  },
+  {
+    id: 'gym',
+    label: 'Gym',
+    name: 'Gym',
+    task: 'Reached Gym. Start warm-up and hydration.',
+    radius: 100,
+  },
+  {
+    id: 'home',
+    label: 'Home',
+    name: 'Home',
+    task: 'Reached Home. Review personal tasks.',
+    radius: 100,
+  },
+  {
+    id: 'pickup',
+    label: 'Pickup',
+    name: 'Pickup Point',
+    task: 'Reached pickup point. Confirm pickup details.',
+    radius: 50,
+  },
+  {
+    id: 'medicine',
+    label: 'Medicine',
+    name: 'Pharmacy',
+    task: 'Reached Pharmacy. Buy your medicines.',
+    radius: 50,
+  },
+]
 
 const defaultForm = {
   name: '',
@@ -195,6 +232,7 @@ function App() {
       let nearestInside = null
 
       geofences.forEach((fence) => {
+        const now = Date.now()
         const distance = haversineDistanceMeters(currentPosition, {
           lat: fence.lat,
           lng: fence.lng,
@@ -204,8 +242,10 @@ function App() {
         const inside = distance <= Number(fence.radius)
         const wasInside = Boolean(insideRef.current[fence.id])
         insideRef.current[fence.id] = inside
+        const isSnoozed = Number(fence.snoozedUntil || 0) > now
+        const isDone = Boolean(fence.completed)
 
-        if (inside && !wasInside) {
+        if (inside && !wasInside && !isSnoozed && !isDone) {
           void sendSystemNotification({
             title: `Reached ${fence.name}`,
             body: fence.task || 'Location reminder triggered.',
@@ -332,6 +372,8 @@ function App() {
       lat: parsedLat,
       lng: parsedLng,
       mode: modeForName(name),
+      completed: false,
+      snoozedUntil: null,
     }
 
     setGeofences((prev) => [fence, ...prev].slice(0, MAX_GEOFENCES))
@@ -370,6 +412,18 @@ function App() {
     setErrorMessage('')
   }
 
+  const handleApplyTemplate = (template) => {
+    setForm((prev) => ({
+      ...prev,
+      name: template.name,
+      task: template.task,
+      radius: template.radius,
+    }))
+    setLocationQuery(template.name)
+    setInfoMessage(`${template.label} template applied. Pick location by search/map/current location.`)
+    setErrorMessage('')
+  }
+
   const handleDelete = (id) => {
     setGeofences((prev) => prev.filter((fence) => fence.id !== id))
     setDistances((prev) => {
@@ -381,6 +435,55 @@ function App() {
       setActiveFenceId(null)
     }
     delete insideRef.current[id]
+  }
+
+  const handleDoneTask = (id) => {
+    setGeofences((prev) =>
+      prev.map((fence) =>
+        fence.id === id
+          ? {
+              ...fence,
+              completed: true,
+              snoozedUntil: null,
+            }
+          : fence,
+      ),
+    )
+    setInfoMessage('Task marked as done.')
+    setErrorMessage('')
+  }
+
+  const handleSnoozeTask = (id) => {
+    const snoozedUntil = Date.now() + 10 * 60 * 1000
+    setGeofences((prev) =>
+      prev.map((fence) =>
+        fence.id === id
+          ? {
+              ...fence,
+              completed: false,
+              snoozedUntil,
+            }
+          : fence,
+      ),
+    )
+    setInfoMessage('Task snoozed for 10 minutes.')
+    setErrorMessage('')
+  }
+
+  const handleReopenTask = (id) => {
+    setGeofences((prev) =>
+      prev.map((fence) =>
+        fence.id === id
+          ? {
+              ...fence,
+              completed: false,
+              snoozedUntil: null,
+            }
+          : fence,
+      ),
+    )
+    setInfoMessage('Task reopened.')
+    setErrorMessage('')
   }
 
   const handleEnableMobileAlerts = async () => {
@@ -513,6 +616,22 @@ function App() {
             </div>
 
             <div>
+              <p className="mb-2 text-xs text-white/80">One-tap templates</p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                {QUICK_TEMPLATES.map((template) => (
+                  <button
+                    key={template.id}
+                    type="button"
+                    onClick={() => handleApplyTemplate(template)}
+                    className="rounded-xl bg-white/10 px-3 py-2 text-sm font-semibold text-white hover:bg-white/20 active:scale-[0.99]"
+                  >
+                    {template.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
               <div>
                 <input
                   className="w-full rounded-xl border border-white/20 bg-black/20 p-3 text-sm outline-none placeholder:text-white/60"
@@ -639,6 +758,10 @@ function App() {
             ) : (
               geofences.map((fence) => {
                 const distance = distances[fence.id]
+                const snoozedMs = Number(fence.snoozedUntil || 0) - Date.now()
+                const isSnoozed = snoozedMs > 0
+                const snoozedMinutes = Math.ceil(snoozedMs / 60000)
+                const isDone = Boolean(fence.completed)
                 const inside =
                   typeof distance === 'number' && Number.isFinite(distance)
                     ? distance <= fence.radius
@@ -648,7 +771,9 @@ function App() {
                   <article
                     key={fence.id}
                     className={`rounded-xl border p-3 ${
-                      inside
+                      isDone
+                        ? 'border-slate-300/50 bg-slate-600/20'
+                        : inside
                         ? 'border-emerald-300/70 bg-emerald-500/20'
                         : 'border-white/20 bg-black/20'
                     }`}
@@ -665,6 +790,31 @@ function App() {
                         Delete
                       </button>
                     </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleDoneTask(fence.id)}
+                        className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-semibold hover:bg-emerald-500"
+                      >
+                        Done
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSnoozeTask(fence.id)}
+                        className="rounded-lg bg-amber-500 px-3 py-1 text-xs font-semibold hover:bg-amber-400"
+                      >
+                        Snooze 10 min
+                      </button>
+                      {(isDone || isSnoozed) && (
+                        <button
+                          type="button"
+                          onClick={() => handleReopenTask(fence.id)}
+                          className="rounded-lg bg-cyan-600 px-3 py-1 text-xs font-semibold hover:bg-cyan-500"
+                        >
+                          Reopen
+                        </button>
+                      )}
+                    </div>
                     <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
                       <p>Radius: {fence.radius}m</p>
                       <p>
@@ -673,6 +823,7 @@ function App() {
                           ? `${Math.round(distance)}m`
                           : 'Waiting GPS...'}
                       </p>
+                      <p>Status: {isDone ? 'Done' : isSnoozed ? `Snoozed ${snoozedMinutes}m` : 'Active'}</p>
                       <p>Lat: {fence.lat.toFixed(6)}</p>
                       <p>Lng: {fence.lng.toFixed(6)}</p>
                     </div>
