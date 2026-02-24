@@ -21,6 +21,10 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return
 
   const url = new URL(event.request.url)
+  if (url.origin !== self.location.origin) {
+    return
+  }
+
   const isNavigation = event.request.mode === 'navigate'
   const isHtmlRequest =
     event.request.headers.get('accept')?.includes('text/html') ||

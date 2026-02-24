@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import MapPicker from './components/MapPicker'
 import {
+  getNotificationStatus,
   playImpactTone,
   requestNotificationPermission,
   sendSystemNotification,
@@ -12,6 +13,7 @@ import { loadGeofences, saveGeofences } from './utils/storage'
 
 const TRACKING_INTERVAL_MS = 30000
 const RADIUS_OPTIONS = [50, 100, 500]
+const MAX_GEOFENCES = 20
 
 const defaultForm = {
   name: '',
@@ -120,15 +122,7 @@ function App() {
   }, [geofences])
 
   useEffect(() => {
-    let mounted = true
-    requestNotificationPermission().then((status) => {
-      if (mounted) {
-        setNotificationStatus(status)
-      }
-    })
-    return () => {
-      mounted = false
-    }
+    setNotificationStatus(getNotificationStatus())
   }, [])
 
   useEffect(() => {
@@ -212,7 +206,7 @@ function App() {
         insideRef.current[fence.id] = inside
 
         if (inside && !wasInside) {
-          sendSystemNotification({
+          void sendSystemNotification({
             title: `Reached ${fence.name}`,
             body: fence.task || 'Location reminder triggered.',
           })
@@ -340,7 +334,7 @@ function App() {
       mode: modeForName(name),
     }
 
-    setGeofences((prev) => [fence, ...prev].slice(0, 20))
+    setGeofences((prev) => [fence, ...prev].slice(0, MAX_GEOFENCES))
     setForm(defaultForm)
     setLocationQuery('')
     setLocationSuggestions([])

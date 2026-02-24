@@ -1,3 +1,10 @@
+export const getNotificationStatus = () => {
+  if (!('Notification' in window)) {
+    return 'unsupported'
+  }
+  return Notification.permission
+}
+
 export const requestNotificationPermission = async () => {
   if (!('Notification' in window)) {
     return 'unsupported'
